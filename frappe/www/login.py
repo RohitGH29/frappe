@@ -45,7 +45,7 @@ def get_context(context):
 	context["disable_user_pass_login"] = cint(frappe.get_system_settings("disable_user_pass_login"))
 	context["logo"] = frappe.get_website_settings("app_logo") or frappe.get_hooks("app_logo_url")[-1]
 	context["app_name"] = (
-		frappe.get_website_settings("app_name") or frappe.get_system_settings("app_name") or _("Frappe")
+		frappe.get_website_settings("app_name") or frappe.get_system_settings("app_name") or _("SM ERPNext")
 	)
 
 	signup_form_template = frappe.get_hooks("signup_form_template")
