@@ -2,9 +2,9 @@ import os
 
 from . import __version__ as app_version
 
-app_name = "frappe"
-app_title = "Frappe Framework"
-app_publisher = "Frappe Technologies"
+app_name = "Software Mathematics"
+app_title = "Software Mathematics"
+app_publisher = "Software Mathematics"
 app_description = "Full stack web framework with Python, Javascript, MariaDB, Redis, Node"
 app_license = "MIT"
 app_logo_url = "/assets/frappe/images/frappe-framework-logo.svg"
