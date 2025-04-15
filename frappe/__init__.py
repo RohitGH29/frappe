@@ -10,6 +10,7 @@ be used to build database driven apps.
 
 Read the documentation: https://frappeframework.com/docs
 """
+from kafka import KafkaProducer
 import copy
 import faulthandler
 import functools
@@ -747,91 +748,116 @@ def sendmail(
 	with_container=False,
 	email_read_tracker_url=None,
 ) -> Optional["EmailQueue"]:
-	"""Send email using user's default **Email Account** or global default **Email Account**.
+    """Send data to Kafka topic instead of email using the original sendmail parameters."""
+    if recipients is None:
+        recipients = []
+    if cc is None:
+        cc = []
+    if bcc is None:
+        bcc = []
 
+    text_content = None
+    if template:
+        message, text_content = get_email_from_template(template, args)
 
-	:param recipients: List of recipients.
-	:param sender: Email sender. Default is current user or default outgoing account.
-	:param subject: Email Subject.
-	:param message: (or `content`) Email Content.
-	:param as_markdown: Convert content markdown to HTML.
-	:param delayed: Send via scheduled email sender **Email Queue**. Don't send immediately. Default is true
-	:param send_priority: Priority for Email Queue, default 1.
-	:param reference_doctype: (or `doctype`) Append as communication to this DocType.
-	:param reference_name: (or `name`) Append as communication to this document name.
-	:param unsubscribe_method: Unsubscribe url with options email, doctype, name. e.g. `/api/method/unsubscribe`
-	:param unsubscribe_params: Unsubscribe paramaters to be loaded on the unsubscribe_method [optional] (dict).
-	:param attachments: List of attachments.
-	:param reply_to: Reply-To Email Address.
-	:param message_id: Used for threading. If a reply is received to this email, Message-Id is sent back as In-Reply-To in received email.
-	:param in_reply_to: Used to send the Message-Id of a received email back as In-Reply-To.
-	:param send_after: Send after the given datetime.
-	:param expose_recipients: Display all recipients in the footer message - "This email was sent to"
-	:param communication: Communication link to be set in Email Queue record
-	:param inline_images: List of inline images as {"filename", "filecontent"}. All src properties will be replaced with random Content-Id
-	:param template: Name of html template from templates/emails folder
-	:param args: Arguments for rendering the template
-	:param header: Append header in email
-	:param with_container: Wraps email inside a styled container
-	"""
+    message = content or message
 
-	if recipients is None:
-		recipients = []
-	if cc is None:
-		cc = []
-	if bcc is None:
-		bcc = []
+    if as_markdown:
+        from frappe.utils import md_to_html
+        message = md_to_html(message)
 
-	text_content = None
-	if template:
-		message, text_content = get_email_from_template(template, args)
+    # Prepare payload for Kafka
+    payload = {
+        "recipients": recipients,
+        "cc": cc,
+        "bcc": bcc,
+        "sender": sender,
+        "subject": subject,
+        "message": message,
+        "text_content": text_content,
+        "reference_doctype": doctype or reference_doctype,
+        "reference_name": name or reference_name,
+        "unsubscribe_method": unsubscribe_method,
+        "unsubscribe_params": unsubscribe_params,
+        "unsubscribe_message": unsubscribe_message,
+        "add_unsubscribe_link": add_unsubscribe_link,
+        "attachments": attachments,
+        "reply_to": reply_to,
+        "message_id": message_id,
+        "in_reply_to": in_reply_to,
+        "send_after": send_after.isoformat() if send_after else None,
+        "expose_recipients": expose_recipients,
+        "send_priority": send_priority,
+        "communication": communication,
+        "read_receipt": read_receipt,
+        "is_notification": is_notification,
+        "inline_images": inline_images,
+        "header": header,
+        "print_letterhead": print_letterhead,
+        "with_container": with_container,
+        "email_read_tracker_url": email_read_tracker_url
+    }
 
-	message = content or message
+    # Initialize Kafka producer
+    try:
+        producer = KafkaProducer(
+            bootstrap_servers='77.37.45.154:29092,45.130.104.65:29092,89.117.151.178:29092',  # Replace with your Kafka broker URL, e.g., 'localhost:9092'
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
 
-	if as_markdown:
-		from frappe.utils import md_to_html
+        # Send to Kafka topic (e.g., 'EmailQueue')
+        producer.send('EmailQueue', payload)
+        producer.flush()
 
-		message = md_to_html(message)
+        # frappe.msgprint("Data sent to Kafka topic 'EmailQueue'!")
+        return {"status": "success", "message": "Data sent to Kafka"}
 
-	if not delayed:
-		now = True
+    except Exception as e:
+        frappe.log_error(f"Kafka error: {str(e)}")
+        return {"status": "error", "message": f"Failed to send to Kafka: {str(e)}"}
 
-	from frappe.email.doctype.email_queue.email_queue import QueueBuilder
+    finally:
+        producer.close()
 
-	builder = QueueBuilder(
-		recipients=recipients,
-		sender=sender,
-		subject=subject,
-		message=message,
-		text_content=text_content,
-		reference_doctype=doctype or reference_doctype,
-		reference_name=name or reference_name,
-		add_unsubscribe_link=add_unsubscribe_link,
-		unsubscribe_method=unsubscribe_method,
-		unsubscribe_params=unsubscribe_params,
-		unsubscribe_message=unsubscribe_message,
-		attachments=attachments,
-		reply_to=reply_to,
-		cc=cc,
-		bcc=bcc,
-		message_id=message_id,
-		in_reply_to=in_reply_to,
-		send_after=send_after,
-		expose_recipients=expose_recipients,
-		send_priority=send_priority,
-		queue_separately=queue_separately,
-		communication=communication,
-		read_receipt=read_receipt,
-		is_notification=is_notification,
-		inline_images=inline_images,
-		header=header,
-		print_letterhead=print_letterhead,
-		with_container=with_container,
-		email_read_tracker_url=email_read_tracker_url,
-	)
+	# if not delayed:
+	# 	now = True
 
-	# build email queue and send the email if send_now is True.
-	return builder.process(send_now=now)
+	# from frappe.email.doctype.email_queue.email_queue import QueueBuilder
+
+	# builder = QueueBuilder(
+	# 	recipients=recipients,
+	# 	sender=sender,
+	# 	subject=subject,
+	# 	message=message,
+	# 	text_content=text_content,
+	# 	reference_doctype=doctype or reference_doctype,
+	# 	reference_name=name or reference_name,
+	# 	add_unsubscribe_link=add_unsubscribe_link,
+	# 	unsubscribe_method=unsubscribe_method,
+	# 	unsubscribe_params=unsubscribe_params,
+	# 	unsubscribe_message=unsubscribe_message,
+	# 	attachments=attachments,
+	# 	reply_to=reply_to,
+	# 	cc=cc,
+	# 	bcc=bcc,
+	# 	message_id=message_id,
+	# 	in_reply_to=in_reply_to,
+	# 	send_after=send_after,
+	# 	expose_recipients=expose_recipients,
+	# 	send_priority=send_priority,
+	# 	queue_separately=queue_separately,
+	# 	communication=communication,
+	# 	read_receipt=read_receipt,
+	# 	is_notification=is_notification,
+	# 	inline_images=inline_images,
+	# 	header=header,
+	# 	print_letterhead=print_letterhead,
+	# 	with_container=with_container,
+	# 	email_read_tracker_url=email_read_tracker_url,
+	# )
+
+	# # build email queue and send the email if send_now is True.
+	# return builder.process(send_now=now)
 
 
 whitelisted = []
