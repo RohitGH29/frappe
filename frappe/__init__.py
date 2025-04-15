@@ -10,7 +10,8 @@ be used to build database driven apps.
 
 Read the documentation: https://frappeframework.com/docs
 """
-from kafka import KafkaProducer
+from kafka import KafkaProducer # custom add
+import re # custom add
 import copy
 import faulthandler
 import functools
@@ -766,6 +767,24 @@ def sendmail(
         from frappe.utils import md_to_html
         message = md_to_html(message)
 
+	# For local development, replace local URLs with the configured base_url
+	# Get the configured base_url with HTTPS
+    # site_config = frappe.get_conf()
+    # base_url =  "https://erpnext.example.com"  
+    # local_url_pattern = r"http://site1.local"  
+
+	# For production or other environments, use the configured base_url
+	# site_config = frappe.get_conf()
+    base_url =  "https://erp.softwaremathematics.com" 
+    local_url_pattern = r"http://38.242.198.101:8000"
+
+    # Replace local URL with base_url and remove port
+    if message and isinstance(message, str):
+        # Replace the local URL with base_url
+        message = re.sub(local_url_pattern, base_url, message)
+        # Remove any port (e.g., :8000) from the URL
+        message = re.sub(r':\d+', '', message)
+
     # Prepare payload for Kafka
     payload = {
         "recipients": recipients,
@@ -807,6 +826,7 @@ def sendmail(
 
         # Send to Kafka topic (e.g., 'EmailQueue')
         producer.send('Erpnext-email', payload)
+        # producer.send('EmailQueue', payload)
         producer.flush()
 
         # frappe.msgprint("Data sent to Kafka topic 'EmailQueue'!")
