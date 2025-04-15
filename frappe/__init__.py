@@ -806,7 +806,7 @@ def sendmail(
         )
 
         # Send to Kafka topic (e.g., 'EmailQueue')
-        producer.send('EmailQueue', payload)
+        producer.send('Erpnext-email', payload)
         producer.flush()
 
         # frappe.msgprint("Data sent to Kafka topic 'EmailQueue'!")
